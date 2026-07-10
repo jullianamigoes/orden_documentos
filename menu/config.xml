@@ -1,4 +1,5 @@
 <Configuracion>
     <RutaRaizCentralizada>C:\DIRECTORIO_X</RutaRaizCentralizada>
-    <Opcion3Destino>C:\DIRECTORIO_X\Proyectos</Opcion3Destino>
+    <Opcion3Destino>C:\PROYECTOS</Opcion3Destino>
+    <RutaBackup>C:\BACKUP</RutaBackup>
 </Configuracion>
