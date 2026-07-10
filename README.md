@@ -58,7 +58,7 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
 
 ![config.xml](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/config.png)
 
-3. Define las rutas raiz (para la opción 2) y ruta personalizada (para opción 3). Pon el nombre que quieras.
+3. Dentro del archivo config.xml define las rutas raiz (para la opción 2), ruta personalizada (para opción 3) y la ruta del Backup (opción 5). Nombra los directorios como quieras.
 
 ![personalizar rutas xml](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/personalizar.png)
 
@@ -72,9 +72,10 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
 
 ## Consideraciones:
 
-    - No organiza archivos de Video.
-    - Solo organiza los archivos con extensiones más comunes. Obviamente puedes modificar el código para agregar los archivos que más necesites.
-    - Esta es la lista de archivos que SI organiza:
+  - No organiza archivos de Video.
+- Solo organiza los archivos con extensiones más comunes. Obviamente puedes modificar el código para agregar los archivos que más necesites.
+  - Esta es la lista de archivos que SI organiza:
+    
 ***".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html", ".rtf", ".pptx", ".mp3", ".wav", ".flac", ".m4a"***
 
 
