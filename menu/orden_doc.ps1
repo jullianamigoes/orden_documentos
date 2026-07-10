@@ -132,7 +132,7 @@ function Invoke-ProcesarArchivo {
 
 function Test-EsArchivoValido {
     param([System.IO.FileInfo]$Archivo)
-    $Permitidas = @(".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html", ".mp3", ".wav", ".flac", ".m4a")
+    $Permitidas = @(".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html", ".rtf", ".pptx", ".mp3", ".wav", ".flac", ".m4a")
     return ($Permitidas -contains $Archivo.Extension.ToLower()) -and !($Archivo.Attributes -match "Hidden")
 }
 
@@ -158,7 +158,7 @@ do {
             
             $ExtImagenes = @(".jpg", ".jpeg", ".png", ".gif")
             $ExtAudio    = @(".mp3", ".wav", ".flac", ".m4a", ".wma")
-            $ExtDocumentos = @(".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html")
+            $ExtDocumentos = @(".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html", ".rtf", ".pptx")
             
             $fullPath = Obtener-RutaReal $inputPath
             
