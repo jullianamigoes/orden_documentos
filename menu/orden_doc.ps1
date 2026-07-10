@@ -1,11 +1,10 @@
 <#
 .SYNOPSIS
-    OrganizadorPro: Script de automatización para gestión masiva de archivos.
+    OrganizadorPro: Script de automatización para gestión masiva de archivos con módulo de Backup.
     
 .DESCRIPTION
-    Este script organiza, renombra y mueve archivos basándose en reglas estrictas
-    de nomenclatura, filtrado de conectores y estructuración por fechas.
-    Incluye un sistema de auditoría (logs) y manejo robusto de excepciones.
+    Este script organiza, renombra y mueve archivos basándose en reglas estrictas.
+    Incluye un sistema de auditoría (logs), manejo de excepciones y respaldos vía Robocopy.
 #>
 
 # Forzar codificación UTF-8 en la sesión de consola
@@ -19,18 +18,19 @@ if (Test-Path $RutaConfigXml) {
     [xml]$ConfigXml = Get-Content -Path $RutaConfigXml -Raw
     $RutaRaizCentralizada = $ConfigXml.Configuracion.RutaRaizCentralizada
     $Opcion3DestinoXml = $ConfigXml.Configuracion.Opcion3Destino
+    $RutaBackupXml = $ConfigXml.Configuracion.RutaBackup
 } else {
-    # Valores de respaldo por si el archivo XML no existe en la ruta
-    Write-Host "ADVERTENCIA: No se encontró 'config.xml'. Usando valores por defecto." -ForegroundColor Yellow
+    Write-Host "ADVERTENCIA: No se encontro 'config.xml'. Usando valores por defecto." -ForegroundColor Yellow
     $RutaRaizCentralizada = "C:\DIRECTORIO_X"
     $Opcion3DestinoXml = "C:\DIRECTORIO_X\Proyectos"
+    $RutaBackupXml = "C:\DIRECTORIO_X_BACKUP" # Respaldo por defecto
 }
 
 # --- CONFIGURACIÓN GLOBAL ---
 $ArchivoLog = Join-Path $RutaRaizCentralizada "bitacora_organizacion.log"
 $Conectores = @("de", "del", "la", "el", "y", "en", "los", "las", "un", "una")
 $FechaActual = Get-Date -Format "yyyy-MM-dd"
-$MesActual = (Get-Date).ToString("MMMM", [System.Globalization.CultureInfo]::CreateSpecificCulture("es-ES"))
+$MesActual = (Get-Date).ToString("MMMM_yyyy", [System.Globalization.CultureInfo]::CreateSpecificCulture("es-ES")).ToLower()
 
 # Asegurar carpeta de logs/raíz centralizada
 if (!(Test-Path $RutaRaizCentralizada)) { New-Item -ItemType Directory -Path $RutaRaizCentralizada | Out-Null }
@@ -47,20 +47,34 @@ function Write-Log {
 function Obtener-RutaReal {
     param([string]$entrada)
     if ([string]::IsNullOrWhiteSpace($entrada)) { return $entrada }
-    if ($entrada -ieq "escritorio" -or $entrada -ieq "desktop") { return Join-Path $HOME "Desktop" }
-    if ($entrada -ieq "documentos" -or $entrada -ieq "documents") { return Join-Path $HOME "Documents" }
-    if ($entrada -ieq "descargas" -or $entrada -ieq "downloads") { return Join-Path $HOME "Downloads" }
-    if ($entrada -ieq "imagenes" -or $entrada -ieq "pictures") { return Join-Path $HOME "Pictures" }
-    return $entrada
+    
+    $entradaNormalizada = $entrada.Replace('/', '\')
+    if (Split-Path $entradaNormalizada -IsAbsolute) { return $entradaNormalizada }
+
+    $partes = $entradaNormalizada.Split('\')
+    $primeraParte = $partes[0].ToLower()
+
+    $pathMap = @{
+        "escritorio" = "Desktop"; "desktop"    = "Desktop"
+        "documentos" = "Documents"; "documents"  = "Documents"
+        "descargas"  = "Downloads"; "downloads"  = "Downloads"
+        "imagenes"   = "Pictures";  "pictures"   = "Pictures"
+        "musica"     = "Music";     "music"      = "Music"
+    }
+
+    if ($pathMap.ContainsKey($primeraParte)) {
+        $partes[0] = $pathMap[$primeraParte]
+        return Join-Path $HOME ($partes -join '\')
+    }
+
+    return Join-Path $HOME $entradaNormalizada
 }
 
 function Get-NombreTransformado {
     param([string]$NombreBase, [int]$Correlativo)
     
-    # Lógica de Limpieza: Reemplaza espacios por guiones y reduce dobles guiones
     $n = $NombreBase.Replace(" ", "_") -replace "__+", "_"
     
-    # Regla de longitud y filtrado
     if ($n.Length -le 20) {
         $Resultado = $n
     } else {
@@ -68,8 +82,7 @@ function Get-NombreTransformado {
         if ($Palabras.Count -eq 1) {
             $Resultado = $n.Substring(0, 4)
         } else {
-            $Filtradas = $Palabras | Where-Object { $_.Length -gt 3 -and $Conectores -notcontains $_.ToLower() }
-            
+            $Filtradas = $Palabras.Where({ $_.Length -gt 3 -and $Conectores -notcontains $_.ToLower() })
             if ($Filtradas.Count -eq 0) { 
                 $Resultado = $n.Substring(0, 4) 
             } else { 
@@ -85,7 +98,6 @@ function Invoke-ProcesarArchivo {
     
     try {
         $Extension = $Archivo.Extension.ToLower()
-        # Nueva clasificación de tres vías: imágenes, audios o documentos
         $SubDir = if ($Extension -match "\.(jpg|jpeg|png|gif)$") { 
             "img_$FechaActual" 
         } elseif ($Extension -match "\.(mp3|wav|flac|m4a)$") { 
@@ -95,14 +107,12 @@ function Invoke-ProcesarArchivo {
         }
 
         $DestinoFinal = Join-Path $CarpetaDestino $SubDir
-        
         if (!(Test-Path $DestinoFinal)) { New-Item -ItemType Directory -Path $DestinoFinal | Out-Null }
         
         $Correlativo = 1
         $NuevoNombreBase = Get-NombreTransformado $Archivo.BaseName $Correlativo
         $RutaFinal = Join-Path $DestinoFinal "$($NuevoNombreBase)$($Archivo.Extension)"
         
-        # Bucle de Control de Duplicados
         while (Test-Path $RutaFinal) {
             $Correlativo++
             $NuevoNombreBase = Get-NombreTransformado $Archivo.BaseName $Correlativo
@@ -128,56 +138,41 @@ function Test-EsArchivoValido {
 
 # --- MENÚ INTERACTIVO ---
 do {
+    # LIMPIAR LA PANTALLA ANTES DE MOSTRAR EL MENÚ
+    Clear-Host
+
     Write-Host "`n=== ORGANIZADOR DE ARCHIVOS (ConfigXml Activo) ===" -ForegroundColor Cyan
     Write-Host "1. Organizar archivos dentro de carpeta indicada"
     Write-Host "2. Escaneo masivo automatico (Hacia: $RutaRaizCentralizada\$MesActual)"
     Write-Host "3. Guardado Personalizado (Hacia XML Destino: $Opcion3DestinoXml)"
-    Write-Host "4. Buscar/Listar dentro de carpeta centralizada"
-    Write-Host "5. Salir" -ForegroundColor Yellow
+    Write-Host "4. Buscar/Listar dentro de $RutaRaizCentralizada"
+    Write-Host "5. Realizar Backup de ($RutaRaizCentralizada) a ($RutaBackupXml)" -ForegroundColor Yellow
+    Write-Host "6. Salir" -ForegroundColor Red
     
-    $opcion = Read-Host "Seleccione una opcion (1-5)"
+    $opcion = Read-Host "Seleccione una opcion (1-6)"
     
     switch ($opcion) {
         "1" {
-            $inputPath = Read-Host "Ingrese la carpeta origen (ej: Escritorio/Proyectos o Desktop/Proyectos)"
+            $inputPath = Read-Host "Ingrese la carpeta origen (ej: Escritorio/Proyectos o C:\Ruta\Especifica)"
             Write-Log "Iniciando Opción 1 - Origen manual: $inputPath"
             
-            # --- DEFINICIÓN DE EXTENSIONES PERMITIDAS ---
             $ExtImagenes = @(".jpg", ".jpeg", ".png", ".gif")
             $ExtAudio    = @(".mp3", ".wav", ".flac", ".m4a", ".wma")
             $ExtDocumentos = @(".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html")
             
-            $pathMap = @{
-                "escritorio" = "Desktop"
-                "descargas"  = "Downloads"
-                "documentos" = "Documents"
-                "imagenes"   = "Pictures"
-                "musica"     = "Music" # Opcional: añadida traducción por si escriben "musica"
-            }
-            
-            $partes = $inputPath.Split('/')
-            $primeraParte = $partes[0].ToLower()
-            
-            if ($pathMap.ContainsKey($primeraParte)) {
-                $partes[0] = $pathMap[$primeraParte]
-            }
-            
-            $fullPath = Join-Path $HOME ($partes -join '\')
+            $fullPath = Obtener-RutaReal $inputPath
             
             if (Test-Path $fullPath) {
-                # Se añade el filtro para incluir las extensiones de audio ($ExtAudio)
-                $archivos = Get-ChildItem $fullPath -File | Where-Object { 
+                $archivos = (Get-ChildItem $fullPath -File).Where({
                     !($_.Attributes -match "Hidden") -and 
                     ($ExtImagenes -contains $_.Extension.ToLower() -or 
                      $ExtAudio -contains $_.Extension.ToLower() -or 
                      $ExtDocumentos -contains $_.Extension.ToLower())
-                }
+                })
                 
                 if ($archivos) {
-                    foreach ($archivo in $archivos) {
-                        Invoke-ProcesarArchivo $archivo $fullPath
-                    }
-                    Write-Log "Opción 1 completada con éxito."
+                    foreach ($archivo in $archivos) { Invoke-ProcesarArchivo $archivo $fullPath }
+                    Write-Log "Opcion 1 completada con exito."
                 } else {
                     $noFilesMsg = "No se encontraron archivos con las extensiones permitidas en: $fullPath"
                     Write-Host $noFilesMsg -ForegroundColor Yellow
@@ -191,43 +186,29 @@ do {
         }
         "2" {
             $DestinoBase = Join-Path $RutaRaizCentralizada $MesActual
-            Write-Log "Iniciando Opción 2 - Escaneo Masivo Automático hacia: $DestinoBase"
+            Write-Log "Iniciando Opcion 2 - Escaneo Masivo Automatico hacia: $DestinoBase"
+            Write-Log "Escaneando Carpetas: Desktop, Downloads, Documents, Pictures, Music..."
+            Write-Host "Escaneando Carpetas: Desktop, Downloads, Documents, Pictures, Music..."
             
-            $Carpetas = @("Desktop", "Downloads", "Documents", "Pictures")
-            
+            $Carpetas = @("Desktop", "Downloads", "Documents", "Pictures", "Music")
             foreach ($c in $Carpetas) {
                 $path = Join-Path $HOME $c
                 if (Test-Path $path) {
                     Write-Log "Escaneando subcarpeta: $path"
-                    Get-ChildItem $path -File | Where-Object { Test-EsArchivoValido $_ } | ForEach-Object { 
-                        Invoke-ProcesarArchivo $_ $DestinoBase 
-                    }
+                    $archivosValidos = (Get-ChildItem $path -File).Where({ Test-EsArchivoValido $_ })
+                    foreach ($av in $archivosValidos) { Invoke-ProcesarArchivo $av $DestinoBase }
                 }
             }
-            Write-Log "Opción 2 completada."
+            Write-Log "Opcion 2 completada."
         }
         "3" {
-            Write-Host "--- Configuración de Origen (Presiona Enter para usar por defecto) ---" -ForegroundColor Cyan
-            
-            # 1. Solicitar SOLO Origen
+            Write-Host "--- Configuracion de Origen (Presiona Enter para usar por defecto) ---" -ForegroundColor Cyan
             $entradaOrigen = Read-Host "Ruta de origen (Ej: Desktop, Documentos o C:\Ruta) [Por defecto: $HOME]"
+            $origen = if ([string]::IsNullOrWhiteSpace($entradaOrigen)) { $HOME } else { Obtener-RutaReal $entradaOrigen }
             
-            if ([string]::IsNullOrWhiteSpace($entradaOrigen)) {
-                $origen = $HOME
-            } else {
-                $entradaOrigen = Obtener-RutaReal $entradaOrigen
-                if (Split-Path $entradaOrigen -IsAbsolute) {
-                    $origen = $entradaOrigen
-                } else {
-                    $origen = Join-Path $HOME $entradaOrigen
-                }
-            }
-
-            # 2. El Destino se lee directamente de la variable del XML
             $destino = $Opcion3DestinoXml
-            Write-Log "Iniciando Opción 3 - Proyecto desde origen: $origen hacia XML-Destino: $destino"
+            Write-Log "Iniciando Opcion 3 - Proyecto desde origen: $origen hacia XML-Destino: $destino"
 
-            # Crear la carpeta de destino automáticamente si no existe
             if (!(Test-Path $destino)) {
                 try {
                     New-Item -ItemType Directory -Path $destino -Force | Out-Null
@@ -237,28 +218,22 @@ do {
                 }
             }
 
-            # 3. Procesar
-            Write-Host "`nProcesando desde: $origen" -ForegroundColor Yellow
-            Write-Host "Destino XML establecido: $destino`n" -ForegroundColor Yellow
-
             if ((Test-Path $origen) -and (Test-Path $destino)) {
-                Get-ChildItem $origen -File | Where-Object { Test-EsArchivoValido $_ } | ForEach-Object { 
-                    Invoke-ProcesarArchivo $_ $destino 
-                }
+                $archivosValidos = (Get-ChildItem $origen -File).Where({ Test-EsArchivoValido $_ })
+                foreach ($av in $archivosValidos) { Invoke-ProcesarArchivo $av $destino }
                 Write-Host "Proceso completado!" -ForegroundColor Green
-                Write-Log "Opción 3 completada con éxito."
+                Write-Log "Opcion 3 completada con exito."
             } else { 
-                $errMsg = "Error: La ruta de origen o de destino XML no es válida."
+                $errMsg = "Error: La ruta de origen o de destino XML no es valida."
                 Write-Host $errMsg -ForegroundColor Red 
                 Write-Log $errMsg -Tipo "ERROR"
             }
         }
         "4" {
             Write-Host "Listando archivos organizados en: $RutaRaizCentralizada" -ForegroundColor Cyan
-            Write-Log "Ejecutando Opción 4 - Visualización de archivos en grid en: $RutaRaizCentralizada"
+            Write-Log "Ejecutando Opcion 4 - Visualizacion de archivos en grid en: $RutaRaizCentralizada"
             
-            $elementos = Get-ChildItem $RutaRaizCentralizada -Recurse -File | Where-Object { $_.Name -match "_" }
-            
+            $elementos = (Get-ChildItem $RutaRaizCentralizada -Recurse -File).Where({ $_.Name -match "_" })
             if ($elementos) {
                 $elementos | 
                     Select-Object @{N='Nombre del Archivo';E={$_.Name}}, @{N='Ruta Absoluta Actual';E={$_.FullName}} | 
@@ -267,5 +242,48 @@ do {
                 Write-Host "No se encontraron archivos procesados para listar." -ForegroundColor Yellow
             }
         }
+        "5" {
+            Write-Host "`n=== INICIANDO RESPALDO DE SEGURIDAD (Robocopy) ===" -ForegroundColor Green
+            Write-Log "Iniciando Opcion 5 - Respaldo desde $RutaRaizCentralizada hacia $RutaBackupXml"
+
+            if (Test-Path $RutaRaizCentralizada) {
+                # Parámetros recomendados de Robocopy:
+                # /MIR  : Modo Espejo (opcional) (Sincroniza directorios, borra en destino si se borró en origen)
+                # /Z    : Copia archivos en modo reanudable (por si se cae la red o conexión)
+                # /R:3  : Reintenta 3 veces si un archivo está bloqueado
+                # /W:5  : Espera 5 segundos entre reintentos
+                # /V    : Muestra información detallada en consola
+                # /NP   : No muestra el porcentaje de progreso (acelera la copia en consola)
+                # /E       : Copia todos los subdirectorios, incluidos los VACÍOS.
+                # /COPY:DAT: Copia Datos, Atributos y Marcas de tiempo de forma explícita.
+                
+                Write-Host "Sincronizando directorios... Por favor espere." -ForegroundColor Yellow
+                
+                # Ejecución nativa de Robocopy segura
+                & robocopy $RutaRaizCentralizada $RutaBackupXml /E /COPY:DAT /Z /R:3 /W:5 /V /NP
+
+                # Nota: Robocopy usa códigos de salida (ExitCodes) del 0 al 7 como éxito. 
+                # Cualquier valor por encima de 7 indica fallas críticas de copia.
+                if ($LASTEXITCODE -le 7) {
+                    $bkpMsg = "RESPALDO COMPLETADO EXITOSAMENTE. Destino: $RutaBackupXml"
+                    Write-Host $bkpMsg -ForegroundColor Green
+                    Write-Log $bkpMsg
+                } else {
+                    $bkpError = "ADVERTENCIA/ERROR en el respaldo. Codigo de salida Robocopy: $LASTEXITCODE"
+                    Write-Host $bkpError -ForegroundColor Red
+                    Write-Log $bkpError -Tipo "ERROR"
+                }
+            } else {
+                $errorRaiz = "Error: La ruta raiz origen ($RutaRaizCentralizada) no existe."
+                Write-Host $errorRaiz -ForegroundColor Red
+                Write-Log $errorRaiz -Tipo "ERROR"
+            }
+        }
     }
-} while ($opcion -ne "5")
+
+    # PAUSA ANTES DE VOLVER A EMPEZAR EL BUCLE (Excepto si eligió salir)
+    if ($opcion -ne "6" -and ![string]::IsNullOrWhiteSpace($opcion)) {
+        Write-Host "`n--------------------------------------------------" -ForegroundColor Red
+        Read-Host "Presione ENTER para volver al menu principal"
+    }
+} while ($opcion -ne "6")
