@@ -7,7 +7,7 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
 
 ## 🚀 Características principales
 
-- **Menú interactivo** con 5 opciones:
+- **Menú interactivo** con 5 opciones (más la opción salir):
   1. **Organizar archivos dentro de carpeta indicada**
      - Escribe la ruta del directorio que quieres ordenar y el script organizará los archivos automáticamente.
 
