@@ -1,7 +1,7 @@
 # 📂 Organizador de Archivos - `orden_doc.ps1`
 
 Un script en **PowerShell** para ordenar y organizar archivos de manera rápida y flexible.  
-Permite clasificar documentos, imágenes y audios en directorios definidos por el usuario o configurados en un archivo `config.xml`.
+Permite clasificar documentos, imágenes y audios en directorios definidos por el usuario configurados en el archivo `config.xml`.
 
 ---
 
@@ -9,12 +9,12 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
 
 - **Menú interactivo** con 5 opciones:
   1. **Organizar archivos dentro de carpeta indicada**
-     - El usuario escribe la ruta del directorio y el script ordena los archivos automáticamente.
+     - Escribe la ruta del directorio que quieres ordenar y el script organizará los archivos automáticamente.
 
 ![opcion 1](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/op_1.gif)
        
   2. **Escaneo masivo automático**  
-     - Escanea directorios comunes del usuario (Documentos, Escritorio, Imágenes, etc.)  
+     - Escanea directorios comunes del usuario (Documentos, Escritorio, Imágenes, Musica, Descarga.)  
      - Ordena y almacena en una ruta configurada en `config.xml`.
 
 ![opcion 2](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/op_2.gif)
@@ -26,10 +26,16 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
      
   4. **Buscar/Listar archivos**  
      - Accede a la ubicación de los archivos listados en una tabla obtenida desde el log.
-  5. **Salir**  
-     - Cierra la terminal.
+
+![ opcion 4 ](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/op_4.gif)
+       
+  5. **Realizar Backup de (directorio base) a (ruta de directorio para respaldo)**  
+     - Se generará un respaldo de todo el contenido del directorio base (RutaRaizCentralizada de config.xml) y lo copiará a la ruta de respaldo (RutaBackup de config.xml).
     
-![ opcion 4_y_5 ](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/4_5.gif)
+![ opcion 5 ](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/op_5.gif)
+
+  6. **Salir**  
+     - Cierra la terminal.
 
 ---
 
@@ -60,4 +66,15 @@ Permite clasificar documentos, imágenes y audios en directorios definidos por e
 
 ![Ejecutar script](https://github.com/jullianamigoes/assets_proj/blob/main/assets/ps1_orden/ejecutar_archivo.gif)
 
-## Y listo!
+**Y listo!**
+
+---
+
+## Consideraciones:
+
+    - No organiza archivos de Video.
+    - Solo organiza los archivos con extensiones más comunes. Obviamente puedes modificar el código para agregar los archivos que más necesites.
+    - Esta es la lista de archivos que SI organiza:
+***".jpg", ".jpeg", ".png", ".gif", ".pdf", ".docx", ".xlsx", ".txt", ".yml", ".json", ".doc", ".html", ".rtf", ".pptx", ".mp3", ".wav", ".flac", ".m4a"***
+
+
